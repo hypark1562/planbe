@@ -379,6 +379,33 @@ input[type=range]::-moz-range-progress{background:linear-gradient(to right,#FF6A
 .pop p{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.45}
 .pop-note{font-size:12px;color:var(--muted);margin-top:2px}
 
+.device{overflow:clip}  /* 안쪽 요소에 초점이 가도 폰 틀이 밀려 스크롤되지 않게 */
+/* kakao map + navigation */
+#kmap{width:100%;height:240px}
+.kpin{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#FF6A93,#C1285A);color:#fff;font:700 15px/32px var(--body);text-align:center;border:3px solid #fff;box-shadow:0 4px 10px rgba(120,20,60,.45)}
+.kev{display:flex;align-items:center;gap:4px;background:#fff;border-radius:999px;padding:3px 8px 3px 4px;font:600 11px var(--body);color:var(--ink);box-shadow:0 2px 8px rgba(37,26,51,.25);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.kev i{font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#FFF0C2;font-size:12px}
+.kev.festival i{background:#FFD9E3}
+.kme{width:18px;height:18px;border-radius:50%;background:#2F7BFF;border:3px solid #fff;box-shadow:0 0 0 0 rgba(47,123,255,.5);animation:me 1.8s infinite}
+@keyframes me{70%{box-shadow:0 0 0 14px rgba(47,123,255,0)}100%{box-shadow:0 0 0 0 rgba(47,123,255,0)}}
+.map-legend{position:absolute;left:10px;bottom:10px;display:flex;gap:6px;z-index:3}
+.map-legend span{background:#fff;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:600;box-shadow:0 2px 8px rgba(37,26,51,.12)}
+.map .map-tag{z-index:3}
+.where{margin-top:16px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 1px 0 #EEE8F4,0 12px 26px -18px rgba(60,30,90,.45)}
+.where-head{display:flex;gap:12px;align-items:center}
+.where-ic{width:42px;height:42px;border-radius:14px;flex:none;display:grid;place-items:center;font-size:20px;background:linear-gradient(135deg,#DCE8FF,#BFD5FF)}
+.where h4{font-size:16px;font-weight:700}
+.where p{font-size:13px;color:var(--ink-2);margin-top:2px;line-height:1.5}
+.where-btns{display:flex;gap:8px;margin-top:12px}
+.where-btns .btn{height:46px;font-size:14px;border-radius:13px}
+.btn-blue{background:linear-gradient(135deg,#4C8DFF,#2F6BE8);color:#fff;box-shadow:0 10px 20px -10px rgba(47,107,232,.8)}
+.btn-blue:hover{filter:brightness(.95)}
+.btn-kakao{background:#FEE500;color:#191600;text-decoration:none}
+.btn-kakao:hover{filter:brightness(.96)}
+.leg{justify-content:space-between}
+.leg-link{font-size:12px;font-weight:700;color:#2F6BE8;text-decoration:none;padding:4px 8px;border-radius:8px;background:#EEF4FF}
+.ev .kind{position:absolute;right:8px;top:8px;font-size:11px;font-weight:700;background:rgba(37,26,51,.78);color:#fff;padding:3px 7px;border-radius:6px}
+
 /* confetti */
 .confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:4}
 .confetti i{position:absolute;top:-14px;width:8px;height:12px;border-radius:2px;opacity:0;animation:fall 1.9s cubic-bezier(.2,.6,.4,1) forwards}
@@ -576,6 +603,17 @@ input[type=range]::-moz-range-progress{background:linear-gradient(to right,#FF6A
 
       <div class="map" id="map"></div>
 
+      <section class="where" id="where" aria-live="polite">
+        <div class="where-head">
+          <span class="where-ic" aria-hidden="true">📍</span>
+          <div><h4 id="whereTitle">지금 어디에 계세요?</h4><p id="whereText">위치를 알려주시면 첫 장소까지 가는 길을 안내해 드려요.</p></div>
+        </div>
+        <div class="where-btns">
+          <button class="btn btn-blue" id="locBtn">내 위치 찾기</button>
+          <a class="btn btn-kakao" id="navAll" target="_blank" rel="noopener">카카오맵 길찾기</a>
+        </div>
+      </section>
+
       <div class="section-title"><h3>시간표</h3><small>돌발 상황엔 플랜 B를 눌러보세요</small></div>
       <ol class="route" id="route"></ol>
 
@@ -645,36 +683,36 @@ const COURSES = {
   yeonnam:{
     area:"홍대·연남", title:"버거 먹고, 온실 카페 들렀다<br>소품샵까지 걷는 하루",
     stops:[
-      {emoji:"🍔",name:"버거룸 연남",cat:"점심 · 수제버거",dur:70,price:28000,tags:["수제버거","인스타감성"],desc:"두툼한 패티와 감자튀김 세트, 2인 기준이에요.",walk:5,
-       alt:{emoji:"🍝",name:"연남 파스타공방",cat:"점심 · 파스타",dur:70,price:26000,tags:["파스타","조용한"],desc:"좌석 간격이 넓어 대화하기 좋은 생면 파스타집이에요."}},
-      {emoji:"☕",name:"카페 온실",cat:"디저트 · 카페",dur:90,price:16000,tags:["인스타감성","디저트"],desc:"유리 온실 좌석이 있어요. 창가 자리는 오후 2시 전에 차요.",walk:10,
-       alt:{emoji:"📚",name:"책방 카페 사이",cat:"디저트 · 북카페",dur:90,price:15000,tags:["조용한","디저트"],desc:"책 한 권씩 골라 읽을 수 있는 조용한 북카페예요."}},
-      {emoji:"🛍",name:"연남 소품골목",cat:"산책 · 소품샵",dur:120,price:18000,tags:["인스타감성","산책"],desc:"경의선숲길을 따라 소품샵 네 곳을 들러요. 엽서와 키링 예산을 넣었어요.",
-       alt:{emoji:"🎬",name:"홍대 작은영화관",cat:"문화 · 독립영화",dur:120,price:24000,tags:["조용한","전시"],desc:"60석 규모 독립영화관이에요. 두 사람 관람료 기준이에요."}}
+      {emoji:"🍔",name:"버거룸 연남",lat:37.5612,lng:126.9235,cat:"점심 · 수제버거",dur:70,price:28000,tags:["수제버거","인스타감성"],desc:"두툼한 패티와 감자튀김 세트, 2인 기준이에요.",walk:5,
+       alt:{emoji:"🍝",name:"연남 파스타공방",lat:37.5617,lng:126.9246,cat:"점심 · 파스타",dur:70,price:26000,tags:["파스타","조용한"],desc:"좌석 간격이 넓어 대화하기 좋은 생면 파스타집이에요."}},
+      {emoji:"☕",name:"카페 온실",lat:37.5628,lng:126.9252,cat:"디저트 · 카페",dur:90,price:16000,tags:["인스타감성","디저트"],desc:"유리 온실 좌석이 있어요. 창가 자리는 오후 2시 전에 차요.",walk:10,
+       alt:{emoji:"📚",name:"책방 카페 사이",lat:37.5622,lng:126.9262,cat:"디저트 · 북카페",dur:90,price:15000,tags:["조용한","디저트"],desc:"책 한 권씩 골라 읽을 수 있는 조용한 북카페예요."}},
+      {emoji:"🛍",name:"연남 소품골목",lat:37.5641,lng:126.9231,cat:"산책 · 소품샵",dur:120,price:18000,tags:["인스타감성","산책"],desc:"경의선숲길을 따라 소품샵 네 곳을 들러요. 엽서와 키링 예산을 넣었어요.",
+       alt:{emoji:"🎬",name:"홍대 작은영화관",lat:37.5566,lng:126.9236,cat:"문화 · 독립영화",dur:120,price:24000,tags:["조용한","전시"],desc:"60석 규모 독립영화관이에요. 두 사람 관람료 기준이에요."}}
     ],
     pins:[[60,150],[170,82],[285,120]]
   },
   seongsu:{
     area:"성수", title:"브런치로 시작해 팝업 보고<br>로스터리에서 마무리",
     stops:[
-      {emoji:"🥞",name:"성수 브런치하우스",cat:"점심 · 브런치",dur:75,price:32000,tags:["브런치","인스타감성"],desc:"높은 층고와 큰 창, 주말엔 웨이팅 앱 등록을 추천해요.",walk:7,
-       alt:{emoji:"🍔",name:"성수 버거클럽",cat:"점심 · 수제버거",dur:60,price:27000,tags:["수제버거"],desc:"스매시 패티 버거 전문점이에요."}},
-      {emoji:"🖼",name:"팝업 갤러리 S",cat:"문화 · 전시",dur:80,price:0,tags:["전시","인스타감성"],desc:"매달 바뀌는 브랜드 팝업 전시예요. 무료 입장이에요.",walk:6,
-       alt:{emoji:"🌳",name:"서울숲 산책",cat:"산책 · 공원",dur:80,price:0,tags:["산책","조용한"],desc:"사슴 우리와 은행나무길을 지나는 한 바퀴 코스예요."}},
-      {emoji:"☕",name:"로스터리 공장",cat:"디저트 · 카페",dur:80,price:14000,tags:["디저트","인스타감성"],desc:"공장을 고친 대형 카페예요. 원두 시향도 할 수 있어요.",
-       alt:{emoji:"🎵",name:"성수 LP바",cat:"문화 · 음악",dur:90,price:22000,tags:["조용한"],desc:"신청곡을 LP로 틀어주는 바예요."}}
+      {emoji:"🥞",name:"성수 브런치하우스",lat:37.5446,lng:127.0558,cat:"점심 · 브런치",dur:75,price:32000,tags:["브런치","인스타감성"],desc:"높은 층고와 큰 창, 주말엔 웨이팅 앱 등록을 추천해요.",walk:7,
+       alt:{emoji:"🍔",name:"성수 버거클럽",lat:37.544,lng:127.0567,cat:"점심 · 수제버거",dur:60,price:27000,tags:["수제버거"],desc:"스매시 패티 버거 전문점이에요."}},
+      {emoji:"🖼",name:"팝업 갤러리 S",lat:37.5431,lng:127.0579,cat:"문화 · 전시",dur:80,price:0,tags:["전시","인스타감성"],desc:"매달 바뀌는 브랜드 팝업 전시예요. 무료 입장이에요.",walk:6,
+       alt:{emoji:"🌳",name:"서울숲 산책",lat:37.5446,lng:127.0398,cat:"산책 · 공원",dur:80,price:0,tags:["산책","조용한"],desc:"사슴 우리와 은행나무길을 지나는 한 바퀴 코스예요."}},
+      {emoji:"☕",name:"로스터리 공장",lat:37.5452,lng:127.0532,cat:"디저트 · 카페",dur:80,price:14000,tags:["디저트","인스타감성"],desc:"공장을 고친 대형 카페예요. 원두 시향도 할 수 있어요.",
+       alt:{emoji:"🎵",name:"성수 LP바",lat:37.5459,lng:127.0548,cat:"문화 · 음악",dur:90,price:22000,tags:["조용한"],desc:"신청곡을 LP로 틀어주는 바예요."}}
     ],
     pins:[[55,95],[165,150],[290,70]]
   },
   euljiro:{
     area:"을지로", title:"노포 국수 한 그릇,<br>옥상 전망 보고 전시까지",
     stops:[
-      {emoji:"🍜",name:"을지로 국수집",cat:"점심 · 한식 노포",dur:60,price:18000,tags:["한식","노포"],desc:"40년 된 칼국수집이에요. 점심엔 회전이 빨라요.",walk:8,
-       alt:{emoji:"🍔",name:"을지로 버거창고",cat:"점심 · 수제버거",dur:60,price:24000,tags:["수제버거","인스타감성"],desc:"인쇄소 골목 안 숨은 버거집이에요."}},
-      {emoji:"🌇",name:"세운상가 옥상",cat:"산책 · 전망",dur:50,price:0,tags:["산책","인스타감성"],desc:"종묘부터 남산까지 보이는 무료 전망대예요.",walk:5,
-       alt:{emoji:"☕",name:"을지 다방",cat:"디저트 · 레트로 카페",dur:60,price:13000,tags:["노포","디저트"],desc:"쌍화차와 크림소다가 있는 레트로 다방이에요."}},
-      {emoji:"🖼",name:"을지로 작은미술관",cat:"문화 · 전시",dur:90,price:20000,tags:["전시","조용한"],desc:"오래된 인쇄소를 고친 전시 공간이에요. 두 사람 입장료 기준이에요.",
-       alt:{emoji:"🍻",name:"노가리 골목",cat:"저녁 · 노포",dur:90,price:25000,tags:["노포","한식"],desc:"해 질 무렵 야외 테이블이 깔리는 골목이에요."}}
+      {emoji:"🍜",name:"을지로 국수집",lat:37.5662,lng:126.9917,cat:"점심 · 한식 노포",dur:60,price:18000,tags:["한식","노포"],desc:"40년 된 칼국수집이에요. 점심엔 회전이 빨라요.",walk:8,
+       alt:{emoji:"🍔",name:"을지로 버거창고",lat:37.5657,lng:126.9928,cat:"점심 · 수제버거",dur:60,price:24000,tags:["수제버거","인스타감성"],desc:"인쇄소 골목 안 숨은 버거집이에요."}},
+      {emoji:"🌇",name:"세운상가 옥상",lat:37.5696,lng:126.9946,cat:"산책 · 전망",dur:50,price:0,tags:["산책","인스타감성"],desc:"종묘부터 남산까지 보이는 무료 전망대예요.",walk:5,
+       alt:{emoji:"☕",name:"을지 다방",lat:37.5671,lng:126.9929,cat:"디저트 · 레트로 카페",dur:60,price:13000,tags:["노포","디저트"],desc:"쌍화차와 크림소다가 있는 레트로 다방이에요."}},
+      {emoji:"🖼",name:"을지로 작은미술관",lat:37.5655,lng:126.9904,cat:"문화 · 전시",dur:90,price:20000,tags:["전시","조용한"],desc:"오래된 인쇄소를 고친 전시 공간이에요. 두 사람 입장료 기준이에요.",
+       alt:{emoji:"🍻",name:"노가리 골목",lat:37.5662,lng:126.9893,cat:"저녁 · 노포",dur:90,price:25000,tags:["노포","한식"],desc:"해 질 무렵 야외 테이블이 깔리는 골목이에요."}}
     ],
     pins:[[50,120],[175,60],[295,135]]
   }
@@ -845,7 +883,9 @@ function renderResult(note){
       const leg = Math.max(3, Math.round(s.walk*m.factor));
       plan.stops[i].leg = leg;
       move += leg;
-      html += `<div class="leg"><svg width="16" height="16" viewBox="0 0 24 24" fill="none">${m.icon}</svg>${m.leg} ${leg}분</div>`;
+      const nx = course.stops[i+1];
+      const legUrl = (s.lat && nx.lat) ? routeUrl([s, nx]) : "";
+      html += `<div class="leg"><span style="display:inline-flex;align-items:center;gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none">${m.icon}</svg>${m.leg} ${leg}분</span>${legUrl ? `<a class="leg-link" href="${esc(legUrl)}" target="_blank" rel="noopener">길찾기 ↗</a>` : ""}</div>`;
       clock += leg + 5;
     }
     html += `</li>`;
@@ -879,6 +919,9 @@ function renderResult(note){
                                 Math.round(40 + (a1===a0 ? .5 : (a1-s.lat)/(a1-a0))*120) ]);
   }
   $("#map").innerHTML = mapSVG(pins) + `<span class="map-tag">${m.leg} 총 ${move}분</span>`;
+  mapMoveText = `${m.leg} 총 ${move}분`;
+  updateNav();
+  drawKakao();
 
   // 데이터 출처
   const src = $("#source");
@@ -907,14 +950,124 @@ function renderResult(note){
   $("#why").innerHTML = why.map(w=>`<li>${w}</li>`).join("");
 }
 
+/* ---------- 카카오 지도 · 내 위치 · 길찾기 ---------- */
+const KIND = {festival:"축제", exhibition:"전시", event:"행사"};
+let me = null, mapMoveText = "";
+const NAV_BY = {walk:"walk", car:"car", transit:"traffic"};
+const pt = p => `${encodeURIComponent(String(p.name).replace(/[,/]/g," "))},${p.lat},${p.lng}`;
+/* 카카오맵 길찾기 URL: 도보·자동차는 경유지 포함 전체 코스, 대중교통은 경유지가 안 되어 첫 구간만 */
+function routeUrl(points){
+  const by = NAV_BY[state.mode];
+  const list = by === "traffic" ? points.slice(0,2) : points.slice(0,7);
+  if(list.length < 2) return `https://map.kakao.com/link/to/${pt(list[0])}`;
+  return `https://map.kakao.com/link/by/${by}/` + list.map(pt).join("/");
+}
+function updateNav(){
+  const stops = course.stops.filter(s=>s.lat && s.lng);
+  const a = $("#navAll");
+  if(!stops.length){ a.removeAttribute("href"); a.style.display = "none"; return; }
+  a.style.display = "";
+  const pts = me ? [{name:"내 위치", ...me}, ...stops] : stops;
+  a.href = routeUrl(pts);
+  a.textContent = state.mode === "transit" ? (me ? "첫 장소까지 대중교통 길찾기" : "카카오맵 길찾기") : (me ? "여기서부터 전체 코스 길찾기" : "전체 코스 길찾기");
+  if(me){
+    const first = stops[0];
+    const km = walkMin(me, first) * 75 / 1.3 / 1000;
+    const walk = walkMin(me, first);
+    $("#whereTitle").textContent = "현재 위치를 찾았어요";
+    $("#whereText").textContent = km > 3
+      ? `첫 장소 '${first.name}'까지 약 ${km.toFixed(1)}km예요. 대중교통이나 차로 이동하는 걸 추천해요.`
+      : `첫 장소 '${first.name}'까지 걸어서 약 ${walk}분(${Math.round(km*1000)}m)이에요. 아래 버튼을 누르면 카카오맵이 순서대로 안내해요.`;
+    $("#locBtn").textContent = "위치 다시 찾기";
+  }
+}
+$("#locBtn").addEventListener("click", ()=>{
+  if(!navigator.geolocation){ $("#whereText").textContent = "이 브라우저는 위치 찾기를 지원하지 않아요."; return; }
+  $("#locBtn").textContent = "찾는 중…";
+  navigator.geolocation.getCurrentPosition(pos=>{
+    me = {lat:pos.coords.latitude, lng:pos.coords.longitude};
+    updateNav(); drawKakao(); toast("현재 위치를 지도에 표시했어요");
+  }, err=>{
+    $("#locBtn").textContent = "내 위치 찾기";
+    $("#whereText").textContent = err.code === 1
+      ? "위치 권한이 꺼져 있어요. 브라우저 주소창의 자물쇠 아이콘에서 위치를 허용해 주세요."
+      : "위치를 찾지 못했어요. 잠시 후 다시 눌러 주세요.";
+  }, {enableHighAccuracy:true, timeout:10000, maximumAge:60000});
+});
+
+/* 카카오 지도 SDK: 서버에 KAKAO_JS_KEY가 있으면 불러오고, 없으면 그림 지도를 그대로 사용 */
+const kakaoReady = (async ()=>{
+  if(location.protocol === "file:") return null;
+  try{
+    const cfg = await (await fetch("/api/plan")).json();
+    if(!cfg.kakaoJsKey) return null;
+    await new Promise((ok, fail)=>{
+      const sc = document.createElement("script");
+      sc.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(cfg.kakaoJsKey)}&autoload=false`;
+      sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc);
+    });
+    await new Promise(ok => window.kakao.maps.load(ok));
+    return window.kakao;
+  }catch(_){ return null; }
+})();
+
+let drawSeq = 0;
+async function drawKakao(){
+  const seq = ++drawSeq;
+  const kakao = await kakaoReady;
+  if(!kakao || seq !== drawSeq) return;
+  const stops = course.stops.filter(s=>s.lat && s.lng);
+  if(stops.length < 2) return;
+  // 결과 화면이 보일 때 그려야 지도 크기가 맞음
+  for(let k=0; k<20 && !$("#result").classList.contains("active"); k++) await new Promise(r=>setTimeout(r,150));
+  await new Promise(r=>setTimeout(r,380));
+  if(seq !== drawSeq) return;
+  try{
+    const box = $("#map");
+    box.innerHTML = `<div id="kmap" role="img" aria-label="카카오 지도: 코스 동선"></div>
+      <div class="map-legend"><span>🔴 코스</span>${live && live.events && live.events.some(e=>e.lat) ? "<span>🎉 축제·전시</span>" : ""}${me ? "<span>🔵 내 위치</span>" : ""}</div>
+      <span class="map-tag">${esc(mapMoveText)}</span>`;
+    const L = (p)=>new kakao.maps.LatLng(p.lat, p.lng);
+    const map = new kakao.maps.Map($("#kmap"), {center:L(stops[0]), level:4});
+    const bounds = new kakao.maps.LatLngBounds();
+    const line = stops.map(L);
+    new kakao.maps.Polyline({map, path:line, strokeWeight:9, strokeColor:"#FFFFFF", strokeOpacity:1, strokeStyle:"solid"});
+    new kakao.maps.Polyline({map, path:line, strokeWeight:5, strokeColor:"#E23D6D", strokeOpacity:.95, strokeStyle:"solid"});
+    stops.forEach((s,i)=>{
+      bounds.extend(L(s));
+      const el = document.createElement("div"); el.className = "kpin"; el.textContent = i+1; el.title = s.name;
+      new kakao.maps.CustomOverlay({map, position:L(s), content:el, yAnchor:.5, zIndex:3});
+    });
+    if(live && live.events){
+      live.events.filter(e=>e.lat && e.lng).slice(0,8).forEach(e=>{
+        const el = document.createElement("a"); el.className = "kev " + (e.kind||""); el.href = e.url || "#"; el.target = "_blank"; el.rel = "noopener";
+        el.innerHTML = `<i>${e.kind==="festival" ? "🎉" : "🖼"}</i>${esc(e.name)}`;
+        new kakao.maps.CustomOverlay({map, position:L(e), content:el, yAnchor:1.2, zIndex:2});
+      });
+    }
+    if(me){
+      const el = document.createElement("div"); el.className = "kme"; el.title = "내 위치";
+      new kakao.maps.CustomOverlay({map, position:L(me), content:el, yAnchor:.5, zIndex:4});
+      if(walkMin(me, stops[0]) < 60) bounds.extend(L(me));
+    }
+    map.setBounds(bounds, 40, 30, 40, 30);
+  }catch(e){ console.warn("카카오 지도 표시 실패", e); }
+}
+
 function renderLive(){
   const box = $("#liveSec");
   if(!live){ box.innerHTML = ""; return; }
   let h = "";
   if(live.events && live.events.length){
-    h += `<h3>지금 근처에서 하는 전시·행사</h3><p class="sub">서울시 문화행사 정보 · 오늘 진행 중</p><div class="ev-row">` +
+    h += `<h3>지금 근처에서 하는 축제·전시·행사</h3><p class="sub">서울시 문화행사 정보 · 오늘 진행 중 · 지도에도 표시돼요</p><div class="ev-row">` +
       live.events.map(e=>`<a class="ev" href="${esc(e.url||"#")}" target="_blank" rel="noopener">
-        <div class="ev-img">${e.img ? `<img src="${esc(e.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}${e.free ? `<span class="free">무료</span>` : ""}</div>
+        <div class="ev-img">${e.img ? `<img src="${esc(e.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}${e.free ? `<span class="free">무료</span>` : ""}${KIND[e.kind] ? `<span class="kind">${KIND[e.kind]}${e.gu && live.festivals && live.festivals.includes(e) ? " · "+esc(e.gu) : ""}</span>` : ""}</div>
+        <div class="ev-body"><b>${esc(e.name)}</b><p>${esc(e.date)}</p><p>${esc(e.place)}</p></div></a>`).join("") + `</div>`;
+  }
+  if(live.festivals && live.festivals.length){
+    h += `<h3>오늘 서울에서 열리는 축제</h3><p class="sub">코스 밖이지만 함께 들러볼 만한 곳이에요.</p><div class="ev-row">` +
+      live.festivals.map(e=>`<a class="ev" href="${esc(e.url||"#")}" target="_blank" rel="noopener">
+        <div class="ev-img">${e.img ? `<img src="${esc(e.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}${e.free ? `<span class="free">무료</span>` : ""}<span class="kind">축제 · ${esc(e.gu||"")}</span></div>
         <div class="ev-body"><b>${esc(e.name)}</b><p>${esc(e.date)}</p><p>${esc(e.place)}</p></div></a>`).join("") + `</div>`;
   }
   if(live.popups && live.popups.length){
