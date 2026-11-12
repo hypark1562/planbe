@@ -137,13 +137,19 @@ async function callClaude(m, prompt, maxTokens, ms) {
       throw err;
     }
     const j = await r.json();
-    return { data: parseJSON((j.content || []).map(c => c.text || "").join("")), model: m };
+    const text = (j.content || []).filter(c => c.type === "text").map(c => c.text || "").join("");
+    try { return { data: parseJSON(text), model: m }; }
+    catch (pe) {
+      // 원인을 화면에서 바로 알 수 있게 응답 상태를 함께 알려줌
+      const types = (j.content || []).map(c => c.type).join("+") || "없음";
+      throw new Error(`AI 응답 형식 오류 (${m}, 종료=${j.stop_reason}, 블록=${types}, 글자수=${text.length}${text ? `, 시작="${text.slice(0, 40).replace(/\s+/g, " ")}"` : ""})`);
+    }
   } catch (e) {
     if (e.name === "AbortError") { const err = new Error(`Claude 응답 시간 초과 (${m})`); err.timeout = true; throw err; }
     throw e;
   } finally { t.done(); }
 }
-async function askClaude(prompt, maxTokens = 1800, deadline = Date.now() + 38000) {
+async function askClaude(prompt, maxTokens = 6000, deadline = Date.now() + 38000) {
   let lastErr, triedFast = false;
   for (const m of CLAUDE_MODELS) {
     const left = deadline - Date.now();
@@ -194,7 +200,7 @@ async function askGemini(prompt) {
 }
 
 async function askLLM(prompt, deadline) {
-  if (CLAUDE) { const o = await askClaude(prompt, 1800, deadline); return { data: o.data, engine: "claude", model: o.model }; }
+  if (CLAUDE) { const o = await askClaude(prompt, 6000, deadline); return { data: o.data, engine: "claude", model: o.model }; }
   if (GEMINI) return await askGemini(prompt);
   throw new Error("AI 키 없음");
 }
@@ -298,7 +304,7 @@ ${news || "없음"}
 6. tags는 조건의 취향 태그 중 이 장소에 실제로 맞는 것만.
 7. 오늘 열리는 축제가 후보에 있으면 코스에 넣는 것을 우선 고려해.
 8. popups는 웹 문서에서 ${region.area} 근처 팝업스토어를 최대 3개 뽑아. 확실하지 않으면 빈 배열.
-9. JSON만 출력해. 설명 문장 금지.
+9. 다른 말 없이 { 로 시작하는 JSON 하나만 출력해. 코드블록 표시나 설명 문장 금지.
 
 [출력 형식]
 {"title":"줄바꿈(\\n) 포함 2줄 제목","why":["추천 이유 문장","...","..."],
