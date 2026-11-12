@@ -141,7 +141,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 .meter.over i{background:#FF7A9A}
 
 .map{margin-top:18px;border-radius:var(--r-lg);overflow:hidden;background:#EFEAE2;border:1px solid var(--line);position:relative}
-.map svg{display:block;width:100%;height:auto}
+.map > svg{display:block;width:100%;height:auto}
 .map-tag{position:absolute;right:10px;bottom:10px;background:#fff;border-radius:999px;padding:6px 11px;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgba(37,26,51,.12)}
 
 .section-title{display:flex;justify-content:space-between;align-items:baseline;margin:26px 0 6px}
@@ -406,6 +406,33 @@ input[type=range]::-moz-range-progress{background:linear-gradient(to right,#FF6A
 .leg-link{font-size:12px;font-weight:700;color:#2F6BE8;text-decoration:none;padding:4px 8px;border-radius:8px;background:#EEF4FF}
 .ev .kind{position:absolute;right:8px;top:8px;font-size:11px;font-weight:700;background:rgba(37,26,51,.78);color:#fff;padding:3px 7px;border-radius:6px}
 
+/* AI 예상 만족도 (지도학습 + 밴딧 보정) */
+.ai-score{margin-top:14px;background:#fff;border-radius:20px;padding:16px 16px 14px;box-shadow:0 1px 0 #EEE8F4,0 14px 30px -20px rgba(60,30,90,.5);position:relative;overflow:hidden}
+.ai-score::before{content:"";position:absolute;right:-40px;top:-40px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,#EFE8FF,transparent 70%)}
+.as-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;position:relative}
+.as-label{display:block;font-size:13px;font-weight:600;color:var(--muted)}
+.as-val{font-family:var(--display);font-weight:800;font-size:40px;letter-spacing:-.03em;line-height:1.1;background:linear-gradient(120deg,#5A2378,#E23D6D);-webkit-background-clip:text;background-clip:text;color:transparent}
+.as-val small{font-family:var(--body);font-size:15px;font-weight:600;color:var(--muted);-webkit-text-fill-color:var(--muted);margin-left:3px}
+.as-chip{flex:none;font-size:11px;font-weight:700;color:#5A2378;background:#EFE8FF;padding:5px 9px;border-radius:999px;margin-top:4px}
+.as-bar{height:8px;border-radius:4px;background:#F0ECF6;margin:10px 0 12px;overflow:hidden}
+.as-bar i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,#8F73E8,#E23D6D);transition:width .9s cubic-bezier(.2,.8,.2,1) .2s}
+.as-terms{list-style:none;display:flex;flex-direction:column;gap:6px}
+.as-terms li{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--ink-2)}
+.as-terms li b{font-variant-numeric:tabular-nums;font-weight:700}
+.as-terms li b.pos{color:#2B8F5E}.as-terms li b.neg{color:#C1285A}.as-terms li b.zero{color:var(--muted)}
+.as-note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
+.as-more{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+.as-more summary{font-size:13px;font-weight:700;cursor:pointer;color:#5A2378;list-style:none}
+.as-more summary::-webkit-details-marker{display:none}
+.as-more summary::after{content:" ▾"}
+.as-more[open] summary::after{content:" ▴"}
+.pref-row{display:grid;grid-template-columns:64px 1fr 44px;align-items:center;gap:8px;font-size:13px;margin-top:8px}
+.pref-row .pb{height:6px;border-radius:3px;background:#F0ECF6;overflow:hidden}
+.pref-row .pb i{display:block;height:100%;background:linear-gradient(90deg,#8F73E8,#E23D6D);border-radius:3px}
+.pref-row span:last-child{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.as-fine{font-size:12px;color:var(--muted);line-height:1.55;margin-top:10px}
+.learn-toast{color:#EFE8FF}
+
 /* confetti */
 .confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:4}
 .confetti i{position:absolute;top:-14px;width:8px;height:12px;border-radius:2px;opacity:0;animation:fall 1.9s cubic-bezier(.2,.6,.4,1) forwards}
@@ -598,6 +625,21 @@ input[type=range]::-moz-range-progress{background:linear-gradient(to right,#FF6A
           <div class="meter" id="meter"><i></i></div>
         </div>
       </article>
+
+      <section class="ai-score" id="aiScore" aria-label="AI 예상 만족도">
+        <div class="as-head">
+          <div><span class="as-label">AI 예상 만족도</span><div class="as-val" id="asVal">–<small>/ 10</small></div></div>
+          <span class="as-chip">지도학습 + 강화학습 보정</span>
+        </div>
+        <div class="as-bar"><i id="asBar"></i></div>
+        <ul class="as-terms" id="asTerms"></ul>
+        <p class="as-note">9주차 다중회귀 모형(만족도 = 6.2 + 0.58·취향 일치 − 0.22·예산 초과(만 원) − 0.15·이동 시간(10분))으로 예측하고, 내 행동(저장·바꾸기)으로 배운 선호를 더해 보정해요.</p>
+        <details class="as-more">
+          <summary>AI가 학습한 내 취향 보기</summary>
+          <div id="asPrefs"></div>
+          <p class="as-fine">코스를 저장하면 그 종류의 선호가 올라가고, '다른 곳 보기'로 바꾸면 내려가요(멀티암드 밴딧 · 베타 분포 업데이트). 학습한 선호는 다음 코스를 만들 때 AI에게 함께 전달돼요. 계수는 가상 데이터(n=50)로 학습한 초기값이며, 실제 설문 데이터로 다시 학습할 예정이에요.</p>
+        </details>
+      </section>
 
       <p class="source sample" id="source"><span class="live-dot"></span><span id="sourceText">예시 데이터로 보여드려요</span></p>
 
@@ -796,7 +838,7 @@ async function fetchLive(){
   const c = new AbortController(); const timer = setTimeout(()=>c.abort(), 55000);
   try{
     const r = await fetch("/api/plan", {method:"POST", headers:{"content-type":"application/json"}, signal:c.signal,
-      body: JSON.stringify({region:state.region, start:state.start, budget:state.budget, tags:[...state.tags], mode:state.mode})});
+      body: JSON.stringify({region:state.region, start:state.start, budget:state.budget, tags:[...state.tags], mode:state.mode, prefs:prefsForServer()})});
     const j = await r.json().catch(()=>({}));
     if(!r.ok || !j.course) throw new Error(j.error || ("서버 응답 "+r.status));
     return j;
@@ -909,6 +951,8 @@ function renderResult(note){
   const meter = $("#meter"); meter.classList.toggle("over", over);
   const bar = meter.querySelector("i"); bar.style.width = "0";
   requestAnimationFrame(()=>requestAnimationFrame(()=> bar.style.width = Math.min(100, cost/state.budget*100)+"%"));
+  lastScoreArgs = [matched, cost - state.budget, move];
+  renderScore(...lastScoreArgs);
 
   // 지도
   let pins = course.pins;
@@ -928,7 +972,7 @@ function renderResult(note){
   src.classList.toggle("sample", !live);
   if(live){
     const d = new Date(live.fetchedAt);
-    const ai = live.engine==="claude" ? "AI 코스 구성: Claude" : live.engine==="gemini" ? "AI 코스 구성: Gemini" : "AI 미연결 · 규칙 기반 구성";
+    const ai = live.engine==="claude" ? "AI 코스 구성: Claude" : live.engine==="gemini" ? "AI 코스 구성: Gemini" : `AI 미연결 · 규칙 기반 구성${live.engineNote ? ` (AI 오류: ${live.engineNote})` : ""}`;
     $("#sourceText").textContent = `실시간 데이터 · 카카오 장소 ${live.sources.places}곳, 서울 문화행사 ${live.sources.events}건 · ${ai} · ${d.getMonth()+1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")} 기준`;
   } else if(note !== undefined){
     $("#sourceText").textContent = "예시 데이터로 보여드려요" + (note ? ` (실시간 연결 안 됨: ${note})` : "");
@@ -950,9 +994,48 @@ function renderResult(note){
   $("#why").innerHTML = why.map(w=>`<li>${w}</li>`).join("");
 }
 
+/* ---------- AI 모델: 지도학습(다중회귀) + 강화학습식 보정(멀티암드 밴딧) ---------- */
+const REG = {b0:6.2, taste:0.58, over:-0.22, move:-0.15};   // 9주차 회귀계수(B), 가상 데이터 n=50
+const CAT_OF = c => { const k = String(c||"").split(" · ")[0];
+  if(/식사|점심|저녁|브런치/.test(k)) return "식사";
+  if(/카페|디저트/.test(k)) return "카페";
+  if(/전시|문화|행사|공연|축제/.test(k)) return "전시·행사";
+  return "놀거리"; };
+const bandit = (()=>{ try{ return JSON.parse(localStorage.getItem("planbe_bandit")) || {}; }catch(_){ return {}; } })();
+const saveBandit = ()=>{ try{ localStorage.setItem("planbe_bandit", JSON.stringify(bandit)); }catch(_){} };
+const arm = c => (bandit[c] = bandit[c] || [1,1]);                // Beta(α,β) 사전분포 Beta(1,1)
+const prefOf = c => { const [a,b] = arm(c); return a/(a+b); };       // 사후 평균 = 선호도
+function reward(cat, r){ const x = arm(cat); r > 0 ? x[0] += r : x[1] += -r; saveBandit(); }
+function prefsForServer(){ const o = {}; Object.keys(bandit).forEach(k=>{ const [a,b]=bandit[k]; if(a+b>2) o[k] = +(a/(a+b)).toFixed(2); }); return o; }
+
+function scoreCourse(matched, over, move){
+  const xT = Math.min(5, matched), xO = Math.max(0, over)/10000, xM = move/10;
+  const parts = [
+    {label:`취향 일치 ${xT}개 × ${REG.taste}`, v: REG.taste*xT},
+    {label: xO ? `예산 초과 ${won(Math.round(over))}원` : "예산 초과 없음", v: REG.over*xO},
+    {label:`이동 ${move}분`, v: REG.move*xM},
+  ];
+  // 밴딧 보정: 코스에 들어간 장소 종류별 학습된 선호(0.5가 기준)
+  const bonus = Math.max(-1, Math.min(1, course.stops.reduce((t,s)=>t + (prefOf(CAT_OF(s.cat)) - .5)*.8, 0)));
+  parts.push({label:"내 행동으로 보정(강화학습)", v: bonus});
+  const y = Math.max(1, Math.min(10, REG.b0 + parts.reduce((t,p)=>t+p.v, 0)));
+  return {y, parts};
+}
+function renderScore(matched, over, move){
+  const {y, parts} = scoreCourse(matched, over, move);
+  $("#asVal").innerHTML = `${y.toFixed(1)}<small>/ 10</small>`;
+  const bar = $("#asBar"); bar.style.width = "0";
+  requestAnimationFrame(()=>requestAnimationFrame(()=> bar.style.width = (y*10)+"%"));
+  $("#asTerms").innerHTML = `<li><span>기본값(절편)</span><b class="zero">${REG.b0.toFixed(2)}</b></li>` +
+    parts.map(p=>`<li><span>${esc(p.label)}</span><b class="${p.v>0.005?"pos":p.v<-0.005?"neg":"zero"}">${p.v>=0?"+":"−"}${Math.abs(p.v).toFixed(2)}</b></li>`).join("");
+  const cats = ["식사","카페","전시·행사","놀거리"];
+  $("#asPrefs").innerHTML = cats.map(c=>{ const [a,b]=arm(c); const m=a/(a+b);
+    return `<div class="pref-row"><span>${c}</span><span class="pb"><i style="width:${Math.round(m*100)}%"></i></span><span>${Math.round(m*100)}%</span></div>`; }).join("");
+}
+
 /* ---------- 카카오 지도 · 내 위치 · 길찾기 ---------- */
 const KIND = {festival:"축제", exhibition:"전시", event:"행사"};
-let me = null, mapMoveText = "";
+let me = null, mapMoveText = "", lastScoreArgs = [0,0,0];
 const NAV_BY = {walk:"walk", car:"car", transit:"traffic"};
 const pt = p => `${encodeURIComponent(String(p.name).replace(/[,/]/g," "))},${p.lat},${p.lng}`;
 /* 카카오맵 길찾기 URL: 도보·자동차는 경유지 포함 전체 코스, 대중교통은 경유지가 안 되어 첫 구간만 */
@@ -1050,8 +1133,13 @@ async function drawKakao(){
       new kakao.maps.CustomOverlay({map, position:L(me), content:el, yAnchor:.5, zIndex:4});
       if(walkMin(me, stops[0]) < 60) bounds.extend(L(me));
     }
-    map.setBounds(bounds, 40, 30, 40, 30);
-  }catch(e){ console.warn("카카오 지도 표시 실패", e); }
+    map.relayout(); map.setBounds(bounds, 40, 30, 40, 30);
+    // 등장 애니메이션이 끝난 뒤 크기를 다시 맞춤
+    setTimeout(()=>{ try{ map.relayout(); map.setBounds(bounds, 40, 30, 40, 30); }catch(_){} }, 900);
+  }catch(e){
+    console.warn("카카오 지도 표시 실패", e);
+    const tag = document.querySelector("#map .map-tag"); if(tag) tag.textContent = "지도 오류: " + String(e.message||e).slice(0,40);
+  }
 }
 
 function renderLive(){
@@ -1142,7 +1230,10 @@ document.querySelectorAll(".pb-opt").forEach(o=>o.addEventListener("click", ()=>
   setTimeout(()=>{ closePB(); swapStop(pbIndex, o.dataset.why); }, reduce?200:1400);
 }));
 $("#route").addEventListener("click", e=>{
-  const sw = e.target.closest("[data-swap]"); if(sw) return swapStop(+sw.dataset.swap);
+  const sw = e.target.closest("[data-swap]");
+  if(sw){ const i = +sw.dataset.swap; const old = course.stops[i];
+    reward(CAT_OF(old.cat), -1); if(old.alt) reward(CAT_OF(old.alt.cat), .5);
+    return swapStop(i); }
   const pb = e.target.closest("[data-planb]"); if(pb) return openPB(+pb.dataset.planb);
 });
 
@@ -1232,7 +1323,11 @@ function closeSheet(){
   $("#sheet").classList.remove("show"); $("#sheetDim").classList.remove("show"); $("#sheet").setAttribute("aria-hidden","true");
   $("#saveBtn").focus({preventScroll:true});
 }
-$("#saveBtn").addEventListener("click", openSheet);
+$("#saveBtn").addEventListener("click", ()=>{
+  course.stops.forEach(s=>reward(CAT_OF(s.cat), 1));
+  renderScore(...lastScoreArgs);
+  openSheet();
+});
 $("#sheetClose").addEventListener("click", closeSheet);
 $("#sheetDim").addEventListener("click", closeSheet);
 document.addEventListener("keydown", e=>{ if(e.key==="Escape" && $("#sheet").classList.contains("show")) closeSheet(); });
