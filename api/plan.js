@@ -93,6 +93,8 @@ async function seoulEvents(region) {
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // KST
   const all = rows
     .filter(r => (r.STRTDATE || "").slice(0, 10) <= today && (r.END_DATE || "9999").slice(0, 10) >= today)
+    // 데이트와 맞지 않는 교육·아동·단체 프로그램은 제외
+    .filter(r => !/교육|강좌|강의|초등|어린이|유아|학급|단체|아카데미|모집|청소년/.test(`${r.TITLE} ${r.CODENAME}`))
     .map(r => {
       const [lat, lng] = toLatLng(r.LAT, r.LOT);
       const fest = /축제/.test(r.CODENAME || "");
@@ -111,27 +113,40 @@ async function seoulEvents(region) {
   return { near: near.slice(0, 12), fests };
 }
 
-async function askClaude(prompt) {
-  const t = withTimeout(45000);
-  try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST", signal: t.signal,
-      headers: { "x-api-key": CLAUDE, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 2500, messages: [{ role: "user", content: prompt }] }),
-    });
-    if (!r.ok) throw new Error(`Claude ${r.status}: ${(await r.text()).slice(0, 200)}`);
-    const j = await r.json();
-    const text = (j.content || []).map(c => c.text || "").join("");
-    const s = text.indexOf("{"), e = text.lastIndexOf("}");
-    if (s < 0 || e < 0) throw new Error("Claude 응답에서 JSON을 찾지 못했어요");
-    return JSON.parse(text.slice(s, e + 1));
-  } finally { t.done(); }
+// 모델 이름이 계정에서 안 되면(404) 다음 후보로 자동 재시도
+const CLAUDE_MODELS = [...new Set([MODEL, "claude-sonnet-5-5", "claude-haiku-5-5", "claude-sonnet-4-5", "claude-haiku-4-5"])];
+async function askClaude(prompt, maxTokens = 4000) {
+  let lastErr;
+  for (const m of CLAUDE_MODELS) {
+    const t = withTimeout(38000);
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", signal: t.signal,
+        headers: { "x-api-key": CLAUDE, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: m, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!r.ok) {
+        const body = (await r.text()).slice(0, 220);
+        lastErr = new Error(`Claude ${r.status} (${m}): ${body}`);
+        if (r.status === 404 || /model/i.test(body) && r.status === 400) continue;
+        throw lastErr;
+      }
+      const j = await r.json();
+      const text = (j.content || []).map(c => c.text || "").join("");
+      return { data: parseJSON(text), model: m };
+    } catch (e) {
+      if (e.name === "AbortError") throw new Error(`Claude 응답 시간 초과 (${m})`);
+      throw e;
+    } finally { t.done(); }
+  }
+  throw lastErr || new Error("사용 가능한 Claude 모델을 찾지 못했어요");
 }
 
 function parseJSON(text) {
   const s = text.indexOf("{"), e = text.lastIndexOf("}");
   if (s < 0 || e < 0) throw new Error("AI 응답에서 JSON을 찾지 못했어요");
-  return JSON.parse(text.slice(s, e + 1));
+  try { return JSON.parse(text.slice(s, e + 1)); }
+  catch (err) { throw new Error("AI 응답 JSON 형식 오류: " + String(err.message).slice(0, 80)); }
 }
 
 async function askGemini(prompt) {
@@ -155,7 +170,7 @@ async function askGemini(prompt) {
 }
 
 async function askLLM(prompt) {
-  if (CLAUDE) return { data: await askClaude(prompt), engine: "claude", model: MODEL };
+  if (CLAUDE) { const o = await askClaude(prompt); return { data: o.data, engine: "claude", model: o.model }; }
   if (GEMINI) return await askGemini(prompt);
   throw new Error("AI 키 없음");
 }
@@ -227,7 +242,7 @@ function rulePlan(input, region, cands, events, web) {
       ev ? `오늘 진행 중인 '${ev.name}'을 코스에 넣었어요.` : "식사 → 카페 → 놀거리 순서로 하루 흐름을 맞췄어요.",
     ],
     stops,
-    popups: web.slice(0, 3).map(w => ({ name: w.title, period: w.date ? `${w.date} 작성 글` : "", note: "웹 문서 원문 · 방문 전 확인", url: w.url })),
+    popups: web.filter(w => /팝업/.test(w.title)).slice(0, 3).map(w => ({ name: w.title, period: w.date ? `${w.date} 작성 글` : "", note: "웹 문서 원문 · 방문 전 확인", url: w.url })),
   };
 }
 
@@ -242,6 +257,7 @@ function buildPrompt(input, region, cands, events, web) {
 - 두 사람 총예산: ${input.budget}원
 - 취향 태그: ${input.tags.join(", ") || "없음"}
 - 이동 수단: ${{ walk: "도보", transit: "대중교통", car: "자가용" }[input.mode]}
+- 이 사용자의 학습된 선호(0~1, 0.5가 보통): ${Object.keys(input.prefs).length ? Object.entries(input.prefs).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(", ") : "아직 없음"}
 
 [장소 후보] (id | 이름 | 분류 | 주소 | 기간 | 요금)
 ${list}
@@ -250,7 +266,7 @@ ${list}
 ${news || "없음"}
 
 [규칙]
-1. 후보 id 중에서 3곳을 골라 시간 순서대로 배치해. 첫 장소는 식사, 나머지는 카페·전시·산책 등으로 다양하게.
+1. 후보 id 중에서 3곳을 골라 시간 순서대로 배치해. 첫 장소는 식사, 나머지는 카페·전시·산책 등으로 다양하게. 학습된 선호가 높은 종류를 우선해.
 2. 각 장소마다 '플랜 B' 대체 장소를 후보 중에서 1곳 골라(같은 역할, 가급적 실내, 가까운 곳). 코스 장소와 겹치지 않게.
 3. price는 두 사람 기준 예상 비용(원, 정수). 무료 행사는 0. 총합이 예산을 넘지 않게.
 4. dur는 머무는 시간(분, 45~120).
@@ -270,7 +286,15 @@ ${news || "없음"}
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
 
-  // 상태 확인: /api/plan?health=1
+  // AI 연결 테스트: /api/plan?test=ai
+  if (req.method === "GET" && req.query && req.query.test === "ai") {
+    try {
+      if (!CLAUDE && !GEMINI) throw new Error("AI 키가 없어요");
+      const o = CLAUDE ? await askClaude('{"ok":true} 이 JSON만 그대로 출력해.', 50) : await askGemini('{"ok":true} 이 JSON만 그대로 출력해.');
+      return res.status(200).json({ ai: "성공", model: o.model, reply: o.data });
+    } catch (e) { return res.status(200).json({ ai: "실패", error: String(e.message || e) }); }
+  }
+  // 상태 확인: /api/plan
   if (req.method === "GET") {
     return res.status(200).json({ ok: true, keys: { kakao: !!KAKAO, kakaoMap: !!KAKAO_JS, seoul: !!SEOUL, claude: !!CLAUDE, gemini: !!GEMINI },
       kakaoJsKey: KAKAO_JS || null,
@@ -287,6 +311,9 @@ module.exports = async (req, res) => {
       budget: Math.min(500000, Math.max(10000, +body.budget || 70000)),
       tags: (Array.isArray(body.tags) ? body.tags : []).filter(t => TAG_QUERY[t]).slice(0, 8),
       mode: ["walk", "transit", "car"].includes(body.mode) ? body.mode : "walk",
+      // 앱에서 학습한 개인 선호(밴딧 보정값): {식사:0.6, 카페:0.8, ...} 0~1
+      prefs: Object.fromEntries(Object.entries(body.prefs && typeof body.prefs === "object" ? body.prefs : {})
+        .filter(([k, v]) => /^[가-힣·]{1,6}$/.test(k) && isFinite(v)).slice(0, 6).map(([k, v]) => [k, Math.max(0, Math.min(1, +v))])),
     };
 
     // 1) 후보 수집 (병렬)
