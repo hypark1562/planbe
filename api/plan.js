@@ -11,7 +11,7 @@
 const KAKAO = process.env.KAKAO_REST_API_KEY;
 const SEOUL = process.env.SEOUL_API_KEY;
 const CLAUDE = process.env.ANTHROPIC_API_KEY;
-const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
+const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-5-5";   // 빠르고 안정적인 기본 모델
 const GEMINI = process.env.GEMINI_API_KEY;
 const KAKAO_JS = process.env.KAKAO_JS_KEY;   // 지도 표시용 JavaScript 키 (도메인 제한이 걸린 공개용 키)
 const GEMINI_MODELS = process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : ["gemini-flash-latest", "gemini-2.5-flash"];
@@ -61,7 +61,7 @@ async function kakaoImage(q) {
   try {
     const u = new URL("https://dapi.kakao.com/v2/search/image");
     u.searchParams.set("query", q); u.searchParams.set("size", "3");
-    const j = await getJSON(u, kakaoHeaders(), 5000);
+    const j = await getJSON(u, kakaoHeaders(), 4000);
     const d = (j.documents || [])[0];
     return d ? { img: d.image_url, thumb: d.thumbnail_url } : {};
   } catch { return {}; }
@@ -86,10 +86,15 @@ function toLatLng(a, b) {
   return x < 90 ? [x, y] : [y, x];
 }
 
+let seoulCache = { at: 0, rows: null };
 async function seoulEvents(region) {
   if (!SEOUL) return { near: [], fests: [] };
-  const j = await getJSON(`http://openapi.seoul.go.kr:8088/${SEOUL}/json/culturalEventInfo/1/1000/`, {}, 9000);
-  const rows = (j.culturalEventInfo && j.culturalEventInfo.row) || [];
+  let rows = seoulCache.rows;
+  if (!rows || Date.now() - seoulCache.at > 20 * 60e3) {   // 20분 캐시
+    const j = await getJSON(`http://openapi.seoul.go.kr:8088/${SEOUL}/json/culturalEventInfo/1/1000/`, {}, 8000);
+    rows = (j.culturalEventInfo && j.culturalEventInfo.row) || [];
+    seoulCache = { at: Date.now(), rows };
+  }
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // KST
   const all = rows
     .filter(r => (r.STRTDATE || "").slice(0, 10) <= today && (r.END_DATE || "9999").slice(0, 10) >= today)
@@ -113,31 +118,50 @@ async function seoulEvents(region) {
   return { near: near.slice(0, 12), fests };
 }
 
-// 모델 이름이 계정에서 안 되면(404) 다음 후보로 자동 재시도
+// 모델 이름이 계정에서 안 되면(404) 다음 후보로 자동 재시도.
+// 응답이 늦으면(시간 초과) 빠른 모델(Haiku)로 한 번 더 시도해서 전체 응답을 50초 안에 끝냄.
 const CLAUDE_MODELS = [...new Set([MODEL, "claude-sonnet-5-5", "claude-haiku-5-5", "claude-sonnet-4-5", "claude-haiku-4-5"])];
-async function askClaude(prompt, maxTokens = 4000) {
-  let lastErr;
+const FAST_MODEL = "claude-haiku-5-5";
+async function callClaude(m, prompt, maxTokens, ms) {
+  const t = withTimeout(ms);
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", signal: t.signal,
+      headers: { "x-api-key": CLAUDE, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ model: m, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+    });
+    if (!r.ok) {
+      const body = (await r.text()).slice(0, 220);
+      const err = new Error(`Claude ${r.status} (${m}): ${body}`);
+      err.modelMissing = r.status === 404 || (r.status === 400 && /model/i.test(body));
+      throw err;
+    }
+    const j = await r.json();
+    return { data: parseJSON((j.content || []).map(c => c.text || "").join("")), model: m };
+  } catch (e) {
+    if (e.name === "AbortError") { const err = new Error(`Claude 응답 시간 초과 (${m})`); err.timeout = true; throw err; }
+    throw e;
+  } finally { t.done(); }
+}
+async function askClaude(prompt, maxTokens = 1800, deadline = Date.now() + 38000) {
+  let lastErr, triedFast = false;
   for (const m of CLAUDE_MODELS) {
-    const t = withTimeout(38000);
-    try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", signal: t.signal,
-        headers: { "x-api-key": CLAUDE, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model: m, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
-      });
-      if (!r.ok) {
-        const body = (await r.text()).slice(0, 220);
-        lastErr = new Error(`Claude ${r.status} (${m}): ${body}`);
-        if (r.status === 404 || /model/i.test(body) && r.status === 400) continue;
-        throw lastErr;
+    const left = deadline - Date.now();
+    if (left < 6000) break;
+    // 첫 모델은 빠른 모델이 쓸 시간(12초)을 남기고 기다림
+    const ms = m === FAST_MODEL ? left : Math.max(6000, left - 12000);
+    try { return await callClaude(m, prompt, maxTokens, ms); }
+    catch (e) {
+      lastErr = e;
+      if (e.modelMissing) continue;
+      if (e.timeout && !triedFast && m !== FAST_MODEL) {
+        triedFast = true;
+        const rest = deadline - Date.now();
+        if (rest < 6000) break;
+        try { return await callClaude(FAST_MODEL, prompt, maxTokens, rest); } catch (e2) { lastErr = e2; break; }
       }
-      const j = await r.json();
-      const text = (j.content || []).map(c => c.text || "").join("");
-      return { data: parseJSON(text), model: m };
-    } catch (e) {
-      if (e.name === "AbortError") throw new Error(`Claude 응답 시간 초과 (${m})`);
       throw e;
-    } finally { t.done(); }
+    }
   }
   throw lastErr || new Error("사용 가능한 Claude 모델을 찾지 못했어요");
 }
@@ -169,8 +193,8 @@ async function askGemini(prompt) {
   throw lastErr || new Error("Gemini 모델을 찾지 못했어요");
 }
 
-async function askLLM(prompt) {
-  if (CLAUDE) { const o = await askClaude(prompt); return { data: o.data, engine: "claude", model: o.model }; }
+async function askLLM(prompt, deadline) {
+  if (CLAUDE) { const o = await askClaude(prompt, 1800, deadline); return { data: o.data, engine: "claude", model: o.model }; }
   if (GEMINI) return await askGemini(prompt);
   throw new Error("AI 키 없음");
 }
@@ -270,7 +294,7 @@ ${news || "없음"}
 2. 각 장소마다 '플랜 B' 대체 장소를 후보 중에서 1곳 골라(같은 역할, 가급적 실내, 가까운 곳). 코스 장소와 겹치지 않게.
 3. price는 두 사람 기준 예상 비용(원, 정수). 무료 행사는 0. 총합이 예산을 넘지 않게.
 4. dur는 머무는 시간(분, 45~120).
-5. desc는 해요체 한 문장, 실제 정보만 쓰고 지어내지 마.
+5. desc는 해요체 한 문장(40자 이내), 실제 정보만 쓰고 지어내지 마. why도 각 40자 이내.
 6. tags는 조건의 취향 태그 중 이 장소에 실제로 맞는 것만.
 7. 오늘 열리는 축제가 후보에 있으면 코스에 넣는 것을 우선 고려해.
 8. popups는 웹 문서에서 ${region.area} 근처 팝업스토어를 최대 3개 뽑아. 확실하지 않으면 빈 배열.
@@ -290,7 +314,7 @@ module.exports = async (req, res) => {
   if (req.method === "GET" && req.query && req.query.test === "ai") {
     try {
       if (!CLAUDE && !GEMINI) throw new Error("AI 키가 없어요");
-      const o = CLAUDE ? await askClaude('{"ok":true} 이 JSON만 그대로 출력해.', 50) : await askGemini('{"ok":true} 이 JSON만 그대로 출력해.');
+      const o = CLAUDE ? await askClaude('{"ok":true} 이 JSON만 그대로 출력해.', 50, Date.now() + 25000) : await askGemini('{"ok":true} 이 JSON만 그대로 출력해.');
       return res.status(200).json({ ai: "성공", model: o.model, reply: o.data });
     } catch (e) { return res.status(200).json({ ai: "실패", error: String(e.message || e) }); }
   }
@@ -303,6 +327,7 @@ module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 가능해요" });
   if (!KAKAO) return res.status(503).json({ error: "카카오 API 키(KAKAO_REST_API_KEY)가 설정되지 않았어요" });
 
+  const T0 = Date.now();   // 전체 응답을 약 50초 안에 끝내기 위한 기준 시각
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const region = REGIONS[body.region] || REGIONS.yeonnam;
@@ -338,7 +363,7 @@ module.exports = async (req, res) => {
     // 2) 언어모델로 코스 구성 → 실패하면 규칙 기반
     let plan, stops, engine = "rule", engineNote = "";
     try {
-      const out = await askLLM(buildPrompt(input, region, cands.slice(0, 45), events, web));
+      const out = await askLLM(buildPrompt(input, region, cands.slice(0, 32), events, web), T0 + 44000);
       plan = out.data; engine = out.engine; engineNote = out.model;
       const byId = Object.fromEntries(cands.map(c => [c.id, c]));
       const pick = (s) => {
@@ -374,7 +399,8 @@ module.exports = async (req, res) => {
 
     // 3) 대표 이미지 (없는 것만 카카오 이미지 검색)
     const targets = stops.flatMap(s => [s, s.alt]).filter(s => s && !s.img);
-    const imgs = await Promise.all(targets.map(s => kakaoImage(`${s.name} ${region.query}`)));
+    const imgs = Date.now() - T0 > 49000 ? targets.map(() => ({}))
+      : await Promise.all(targets.map(s => kakaoImage(`${s.name} ${region.query}`)));
     targets.forEach((s, i) => { s.img = imgs[i].img; s.thumb = imgs[i].thumb; });
 
     return res.status(200).json({
