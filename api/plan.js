@@ -11,8 +11,9 @@
 const KAKAO = process.env.KAKAO_REST_API_KEY;
 const SEOUL = process.env.SEOUL_API_KEY;
 const CLAUDE = process.env.ANTHROPIC_API_KEY;
-const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-5-5";
+const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
 const GEMINI = process.env.GEMINI_API_KEY;
+const KAKAO_JS = process.env.KAKAO_JS_KEY;   // 지도 표시용 JavaScript 키 (도메인 제한이 걸린 공개용 키)
 const GEMINI_MODELS = process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : ["gemini-flash-latest", "gemini-2.5-flash"];
 
 const REGIONS = {
@@ -86,21 +87,28 @@ function toLatLng(a, b) {
 }
 
 async function seoulEvents(region) {
-  if (!SEOUL) return [];
+  if (!SEOUL) return { near: [], fests: [] };
   const j = await getJSON(`http://openapi.seoul.go.kr:8088/${SEOUL}/json/culturalEventInfo/1/1000/`, {}, 9000);
   const rows = (j.culturalEventInfo && j.culturalEventInfo.row) || [];
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // KST
-  return rows
-    .filter(r => region.gu.includes(r.GUNAME))
+  const all = rows
     .filter(r => (r.STRTDATE || "").slice(0, 10) <= today && (r.END_DATE || "9999").slice(0, 10) >= today)
     .map(r => {
       const [lat, lng] = toLatLng(r.LAT, r.LOT);
+      const fest = /축제/.test(r.CODENAME || "");
       return {
-        name: r.TITLE, category: r.CODENAME, place: r.PLACE, date: r.DATE, fee: r.USE_FEE,
-        free: r.IS_FREE === "무료", img: r.MAIN_IMG, url: r.ORG_LINK || r.HMPG_ADDR, lat, lng, source: "seoul", tags: ["전시"],
+        name: r.TITLE, category: r.CODENAME, place: r.PLACE, date: r.DATE, fee: r.USE_FEE, gu: r.GUNAME,
+        kind: fest ? "festival" : /전시|미술/.test(r.CODENAME || "") ? "exhibition" : "event",
+        free: r.IS_FREE === "무료", img: r.MAIN_IMG, url: r.ORG_LINK || r.HMPG_ADDR, lat, lng, source: "seoul", tags: fest ? ["산책"] : ["전시"],
       };
-    })
-    .slice(0, 12);
+    });
+  const near = all.filter(e => region.gu.includes(e.gu));
+  // 축제는 동네 밖이라도 서울 전체에서 오늘 열리는 것을 함께 보여줌
+  const fests = all.filter(e => e.kind === "festival" && !region.gu.includes(e.gu)).slice(0, 6);
+  // 동네 행사는 축제 → 전시 → 기타 순으로
+  const rank = { festival: 0, exhibition: 1, event: 2 };
+  near.sort((a, b) => rank[a.kind] - rank[b.kind]);
+  return { near: near.slice(0, 12), fests };
 }
 
 async function askClaude(prompt) {
@@ -248,8 +256,9 @@ ${news || "없음"}
 4. dur는 머무는 시간(분, 45~120).
 5. desc는 해요체 한 문장, 실제 정보만 쓰고 지어내지 마.
 6. tags는 조건의 취향 태그 중 이 장소에 실제로 맞는 것만.
-7. popups는 웹 문서에서 ${region.area} 근처 팝업스토어를 최대 3개 뽑아. 확실하지 않으면 빈 배열.
-8. JSON만 출력해. 설명 문장 금지.
+7. 오늘 열리는 축제가 후보에 있으면 코스에 넣는 것을 우선 고려해.
+8. popups는 웹 문서에서 ${region.area} 근처 팝업스토어를 최대 3개 뽑아. 확실하지 않으면 빈 배열.
+9. JSON만 출력해. 설명 문장 금지.
 
 [출력 형식]
 {"title":"줄바꿈(\\n) 포함 2줄 제목","why":["추천 이유 문장","...","..."],
@@ -263,7 +272,8 @@ module.exports = async (req, res) => {
 
   // 상태 확인: /api/plan?health=1
   if (req.method === "GET") {
-    return res.status(200).json({ ok: true, keys: { kakao: !!KAKAO, seoul: !!SEOUL, claude: !!CLAUDE, gemini: !!GEMINI },
+    return res.status(200).json({ ok: true, keys: { kakao: !!KAKAO, kakaoMap: !!KAKAO_JS, seoul: !!SEOUL, claude: !!CLAUDE, gemini: !!GEMINI },
+      kakaoJsKey: KAKAO_JS || null,
       ai: CLAUDE ? `claude (${MODEL})` : GEMINI ? "gemini (무료)" : "없음 → 규칙 기반" });
   }
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 가능해요" });
@@ -282,11 +292,12 @@ module.exports = async (req, res) => {
     // 1) 후보 수집 (병렬)
     const queries = [...new Set([...input.tags.map(t => TAG_QUERY[t]), "맛집", "카페", "소품샵", "가볼만한곳"])].slice(0, 8);
     const month = new Date(Date.now() + 9 * 3600e3).getUTCMonth() + 1;
-    const [placeLists, events, web] = await Promise.all([
+    const [placeLists, ev, web] = await Promise.all([
       Promise.all(queries.map(q => kakaoPlaces(`${region.query} ${q}`, region.center, Object.keys(TAG_QUERY).find(t => TAG_QUERY[t] === q && input.tags.includes(t))).catch(() => []))),
-      seoulEvents(region).catch(() => []),
+      seoulEvents(region).catch(() => ({ near: [], fests: [] })),
       kakaoWeb(`${region.query} 팝업스토어 ${month}월`),
     ]);
+    const events = ev.near, festivals = ev.fests;
     const seen = new Set();
     const cands = [];
     for (const p of [...placeLists.flat(), ...events.filter(e => e.lat)]) {
@@ -342,7 +353,7 @@ module.exports = async (req, res) => {
     return res.status(200).json({
       live: true, fetchedAt: new Date().toISOString(), engine, engineNote,
       course: { area: region.area, title: String(plan.title || `${region.area} 데이트`).replace(/\\n/g, "\n"), why: (plan.why || []).slice(0, 3), stops },
-      events: events.slice(0, 6), popups: (plan.popups || []).slice(0, 3),
+      events: events.slice(0, 8), festivals, popups: (plan.popups || []).slice(0, 3),
       sources: { places: placeLists.flat().length, events: events.length, web: web.length },
     });
   } catch (e) {
